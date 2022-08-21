@@ -12,6 +12,10 @@ from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewar
 
 # Functions
 
+# pbt()
+# ready
+# explore
+
 
 def show_videos(video_path='', prefix=''):
   """
@@ -73,29 +77,29 @@ mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
 print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
 # video untrained model
-record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense_untrained')
+# record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense_untrained')
 
 # Stop training when the model reaches the reward threshold
-# callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=-1, verbose=1)
-# eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, verbose=1)
+callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=-2, verbose=1)
+eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, verbose=1)
 
 # Almost infinite number of timesteps, but the training will stop
 # early as soon as the reward threshold is reached
 
-# model.learn(int(1e10), callback=eval_callback)
+model.learn(int(1e10), callback=eval_callback)
 
 # Train main env
-model.learn(total_timesteps=40000)
+# model.learn(total_timesteps=40000)
 
 # Evaluate the trained agent
 mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
 print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
 # video trained agent
-record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense')
+# record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense')
 
 # show videos
-show_videos('/Users/jodiekoenig/Documents/SkripsieVideos', prefix='ppo-fetchreachdense')
+# show_videos('/Users/jodiekoenig/Documents/SkripsieVideos', prefix='ppo-fetchreachdense')
 # obs = env.reset()
 # while True:
 #     action, _states = model.predict(obs)

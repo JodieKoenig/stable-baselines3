@@ -1,7 +1,7 @@
 import gym
 import mujoco_py
 # Setting FetchPickAndPlace-v1 as the environment
-env = gym.make('LunarLander-v2')
+env = gym.make('FetchReach-v1')
 # Sets an initial state
 if env.reset() is not None:
     print('OKAY')

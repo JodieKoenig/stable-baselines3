@@ -3,6 +3,8 @@ import os
 import base64
 from pathlib import Path
 from IPython import display as ipythondisplay
+import matplotlib.pyplot as plt
+import numpy as np
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
@@ -11,6 +13,10 @@ from stable_baselines3.common.vec_env import VecVideoRecorder, DummyVecEnv
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
 
 # Functions
+
+# pbt()
+# ready
+# explore
 
 
 def show_videos(video_path='', prefix=''):
@@ -52,6 +58,23 @@ def record_video(env_id, model, video_length=500, prefix='', video_folder='/User
     eval_env_vid.close()
 
 
+def evaluate_plot(model, env, no_timesteps):
+    # timestep_rewards, episode_lengths = evaluate_policy(model, eval_env, n_eval_episodes=100, return_episode_rewards=True)
+    mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=100)
+    timestep_rewards.append(mean_reward)
+    # print(f"mean_reward at {no_timesteps} timesteps:{mean_reward:.2f} +/- {std_reward:.2f}")
+    return timestep_rewards
+    # x1 = np.linspace(0, len(timestep_rewards)-1, len(timestep_rewards))
+    # y1 = timestep_rewards
+    # #
+    # fig, ax = plt.subplots()
+    # ax.plot(x1, y1)
+    # plt.show()
+    # for _ in range(1000):
+    #     # renders the environment
+    #     env.render()
+
+
 # Fake display to allow rendering
 os.system("Xvfb :1 -screen 0 1024x768x24 &")
 os.environ['DISPLAY'] = ':1'
@@ -64,19 +87,31 @@ eval_env = make_vec_env("FetchReachDense-v1", n_envs=1)
 number_steps = 0
 accum_rewards = 0
 mean_ep_reward = 0
+timestep_rewards = []
+# number_eval = 400
+timesteps = 0
+timestep_intervals = 200
+no_total_timesteps = 40000
 
 # Define model
 model = PPO("MultiInputPolicy", env, verbose=1)
+timestep_rewards = evaluate_plot(model, eval_env, timesteps)
 
 # Evaluate untrained env
-mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
-print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
+# mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
+# print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
+# x = np.linspace(0, 40000, 1000)
+# y = np.sin(x)
+#
+# fig, ax = plt.subplots()
+# ax.plot(x, y)
+# plt.show()
 # video untrained model
-record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense_untrained')
+# record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense_untrained')
 
 # Stop training when the model reaches the reward threshold
-# callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=-1, verbose=1)
+# callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=-2, verbose=1)
 # eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, verbose=1)
 
 # Almost infinite number of timesteps, but the training will stop
@@ -85,17 +120,31 @@ record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchrea
 # model.learn(int(1e10), callback=eval_callback)
 
 # Train main env
-model.learn(total_timesteps=40000)
+while timesteps < no_total_timesteps:
+    model.learn(total_timesteps=timestep_intervals)
+    timesteps = timesteps+timestep_intervals
+    if timesteps == 1000 or timesteps == 5000 or timesteps == 10000 or timesteps == 20000 or timesteps == 30000 or timesteps == 40000:
+        print(timesteps)
+    timestep_rewards = evaluate_plot(model, eval_env, timesteps)
 
+x1 = np.linspace(0, len(timestep_rewards) - 1, len(timestep_rewards))
+y1 = timestep_rewards
+fig, ax = plt.subplots()
+ax.plot(2e2 * x1, y1)
+ax.grid()
+ax.set_xlabel("Trained Timesteps")
+ax.set_ylabel("Mean Reward over 100 evaluations")
+plt.show()
+print("plot showing")
 # Evaluate the trained agent
-mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
-print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
+# mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
+# print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
 # video trained agent
-record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense')
+# record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense')
 
 # show videos
-show_videos('/Users/jodiekoenig/Documents/SkripsieVideos', prefix='ppo-fetchreachdense')
+# show_videos('/Users/jodiekoenig/Documents/SkripsieVideos', prefix='ppo-fetchreachdense')
 # obs = env.reset()
 # while True:
 #     action, _states = model.predict(obs)
