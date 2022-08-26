@@ -1,7 +1,7 @@
 import os
 import warnings
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Union, Tuple
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import gym
 import numpy as np
@@ -72,7 +72,7 @@ class BaseCallback(ABC):
         """
         return True
 
-    def on_step(self) -> Tuple[bool, list]:
+    def on_step(self) -> bool:
         """
         This method will be called by the model after each call to ``env.step()``.
 
@@ -370,10 +370,9 @@ class EvalCallback(EventCallback):
             if maybe_is_success is not None:
                 self._is_success_buffer.append(maybe_is_success)
 
-    def _on_step(self) -> Tuple[bool, list]:
+    def _on_step(self) -> bool:
 
         continue_training = True
-        performance_tracking = []
 
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
 
@@ -424,7 +423,6 @@ class EvalCallback(EventCallback):
             mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
             mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
             self.last_mean_reward = mean_reward
-            performance_tracking.append(mean_reward)
 
             if self.verbose > 0:
                 print(f"Eval num_timesteps={self.num_timesteps}, " f"episode_reward={mean_reward:.2f} +/- {std_reward:.2f}")
@@ -457,7 +455,7 @@ class EvalCallback(EventCallback):
             if self.callback is not None:
                 continue_training = continue_training and self._on_event()
 
-        return continue_training, performance_tracking
+        return continue_training
 
     def update_child_locals(self, locals_: Dict[str, Any]) -> None:
         """

@@ -318,6 +318,3 @@ class PPO(OnPolicyAlgorithm):
             eval_log_path=eval_log_path,
             reset_num_timesteps=reset_num_timesteps,
         )
-
-    # def stored_buffers(self):
-
