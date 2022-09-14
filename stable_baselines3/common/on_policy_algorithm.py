@@ -180,9 +180,11 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             # Give access to local variables
             callback.update_locals(locals())
             continue_training, performance_tracking = callback.on_step()
+            # print(infos[0].get('is_success'))
+            # if infos[0].get('is_success') == 1:     # stop episode when successful
+            #     continue_training = False
             if continue_training is False:
                 return False, performance_tracking
-
             self._update_info_buffer(infos)
             n_steps += 1
 

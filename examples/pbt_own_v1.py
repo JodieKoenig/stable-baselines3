@@ -13,6 +13,7 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.vec_env import VecVideoRecorder, DummyVecEnv
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
 
+
 #   REFERENCE!!
 def record_video(env_id, model, video_length=500, prefix='',
                  video_folder='/Users/jodiekoenig/Documents/SkripsieVideos/PBT/'):
@@ -30,8 +31,10 @@ def record_video(env_id, model, video_length=500, prefix='',
 
     obs = eval_env_vid.reset()
     for _ in range(video_length):
-        action, _ = model.predict(obs)
-        obs, _, _, _ = eval_env_vid.step(action)
+        action, _ = model.predict(obs)  # end episode inside here instead ?
+        obs, _, _, info = eval_env_vid.step(action)
+        # if info['is_success'] == 1      # end episode here if is success is 1 ?
+        #     break
 
 # Close the video recorder
     eval_env_vid.close()
@@ -41,9 +44,12 @@ class Agents:
     def __init__(self):
         self.model = PPO(policy="MultiInputPolicy", env=env, verbose=1, n_steps=500)
         # put hyperparameters here instead?
+        # learning rate, gamma, gae lambda?, clip range? ent coef?, vf coef?
+        # self.model.learning_rate = np.random([])
         self.performance = []
         self.latest_performance = -np.inf
         self.total_agent_timesteps = 0
+        self.env = make_vec_env(env_id="FetchReachDense-v1", n_envs=1)
     #
     # def myfunc(self):
     #     print("Hello my name is " + self.name)
@@ -150,7 +156,9 @@ while not end_of_training:
         worst_mean_reward = 0  # refresh every iteration to only act on the latest performance
         best_mean_session_performance = -np.inf
         agents[num_population_worst_model].model.policy = agents[num_population_best_model].model.policy
-        print("Replaced model "f"{num_population_worst_model} with model "f"{num_population_best_model}")
+        # changing weights and hyperparemeters , anything else?
+        print("Replaced model policy of "f"{num_population_worst_model} "
+              f"with model policy of "f"{num_population_best_model}")
 
     else:
         pop_mean_reward, success_rate = evaluate_policy(
@@ -175,10 +183,6 @@ y1 = pop_cumulative_mean_reward
 fig, ax = plt.subplots()
 fig.suptitle('Mean Reward of Population Based Best Model Until 100% Success Rate')
 ax.plot(x1, y1)
-fig.savefig("/Users/jodiekoenig/Documents/SkripsiePlotting/Test4_PBT/v4.pdf", dpi=150)
-record_video('FetchReachDense-v1', agents[num_population_best_model].model, video_length=500, prefix='pbt-v4')
-
-
-
-
+fig.savefig("/Users/jodiekoenig/Documents/SkripsiePlotting/Test4_PBT/v5.pdf", dpi=150)
+record_video('FetchReachDense-v1', agents[num_population_best_model].model, video_length=500, prefix='pbt-v5')
 
