@@ -48,15 +48,20 @@ class Agents:
         self.trained_timesteps = 0
         self.total_timesteps = 0
 
-        self.model = PPO(policy="MultiInputPolicy", env=env, verbose=1, n_steps=128)
+        self.model = PPO(policy="MultiInputPolicy", env=env, verbose=1, n_steps=1024)
         # https://medium.com/aureliantactics/ppo-hyperparameters-and-ranges-6fc2d29bccbe
+        self.model.gamma = random.uniform(0.802, 0.988)
+        self.model.gae_lambda = random.uniform(0.91, 0.99)
+        self.model.learning_rate = random.uniform(0.000105, 0.0029)
+        # self.model.vf_coef = random.choice([0.5, 1])
+        # self.model.ent_coef = random.uniform(0, 0.01)
         # self.model.clip_range = random.choice([0.1, 0.2, 0.3])
         # self.model.target_kl = random.uniform(0.003, 0.01)
-        self.model.gamma = random.uniform(0.8, 0.9997)
-        self.model.gae_lambda = random.uniform(0.9, 1)
-        self.model.vf_coef = random.choice([0.5, 1])
-        self.model.ent_coef = random.uniform(0, 0.01)
-        self.model.learning_rate = random.uniform(5E-6, 0.003)
+
+
+def noise(mean, std_dev):
+    parameter = float(np.random.normal(mean, std_dev, 1))
+    return parameter
 
 
 def train(ppo_agent, processing_queue, reward_threshold_training):
@@ -64,10 +69,10 @@ def train(ppo_agent, processing_queue, reward_threshold_training):
 
     callback_on_best_training = StopTrainingOnRewardThreshold(reward_threshold=reward_threshold_training, verbose=1)
     eval_callback_training = EvalCallback(train_agent.env, callback_on_new_best=callback_on_best_training,
-                                          verbose=1, eval_freq=128, n_eval_episodes=50, best_model_save_path="yes")
+                                          verbose=1, eval_freq=512, n_eval_episodes=50, best_model_save_path="yes")
 
     train_agent.model = train_agent.model.learn(
-        total_timesteps=512, callback=eval_callback_training, reset_num_timesteps=False)
+        total_timesteps=1024, callback=eval_callback_training, reset_num_timesteps=False)
 
     train_agent.latest_performance, train_agent.success_rate = evaluate_policy(
         train_agent.model, train_agent.env, n_eval_episodes=10)
@@ -85,7 +90,7 @@ if __name__ == '__main__':
     queue = multiprocessing.Queue()
     env_temp = make_vec_env(env_id="FetchReachDense-v1", n_envs=1)
     callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=-np.inf, verbose=1)
-    eval_callback = EvalCallback(env_temp, callback_on_new_best=callback_on_best, verbose=1, eval_freq=128,
+    eval_callback = EvalCallback(env_temp, callback_on_new_best=callback_on_best, verbose=1, eval_freq=512,
                                  n_eval_episodes=50, best_model_save_path="yes")
     num_agents = 4
     agents = []
@@ -107,8 +112,8 @@ if __name__ == '__main__':
         current_rewards.append(current_mean_reward)
 
     # stored_agents = copy.deepcopy(agents)
-    best_agent = copy.copy(agents[current_rewards.index(max(current_rewards))].model)
-    best_agent_env = copy.copy(agents[current_rewards.index(max(current_rewards))].env)
+    best_agent = copy.deepcopy(agents[current_rewards.index(max(current_rewards))])
+    best_agent_env = copy.deepcopy(agents[current_rewards.index(max(current_rewards))].env)
     best_agent_number = current_rewards.index(max(current_rewards))
     processes = [multiprocessing.Process(target=train, args=(cloudpickle.dumps(agent), queue, reward_threshold))
                  for agent in agents]
@@ -126,31 +131,41 @@ if __name__ == '__main__':
             agents[current_agent_number] = current_agent
 
             if agents[current_agent_number].latest_performance > max(current_rewards):
-                best_agent = copy.copy(agents[current_agent_number].model)
-                best_agent_env = copy.copy(agents[current_agent_number].env)
+                # best_agent = copy.deepcopy(agents[current_agent_number].model)
+                # best_agent = copy.deepcopy(current_agent)
+                best_agent = copy.deepcopy(result)
+                best_agent = cloudpickle.loads(best_agent)
+                best_agent_env = best_agent.env
                 best_agent_number = current_agent_number
             current_rewards[current_agent_number] = agents[current_agent_number].latest_performance
 
             print("Agent number "f"{current_agent_number} "f" "
-                  f"has current mean reward of "f"{agents[current_agent_number].latest_performance}")
+                  f"has current mean reward of "f"{agents[current_agent_number].latest_performance}"f" "
+                  f"after "f"{agents[current_agent_number].total_timesteps}"f" timesteps")
             # stored_agents[current_agent_number] = copy.deepcopy(agents[current_agent_number])
 
             if agents[current_agent_number].latest_performance < (max(current_rewards)-1):
-                # if agents[current_agent_number].latest_performance < (reward_threshold - 1):  # only replace if
-                current_agent.model.policy = copy.copy(best_agent.policy)
-                print("Replaced model policy of "f"{current_agent_number} "
-                    f"with model policy of best agent version of number "f"{best_agent_number}")
+                if agents[current_agent_number].latest_performance < (reward_threshold - 1):  # only replace if
+                    replace = cloudpickle.dumps(best_agent.model)
+                    replace = copy.deepcopy(replace)
+                    agents[current_agent_number].model = cloudpickle.loads(replace)
+                    agents[current_agent_number].model.gamma = noise(best_agent.model.gamma, 0.002)
+                    agents[current_agent_number].model.gae_lambda = noise(best_agent.model.gae_lambda, 0.01)
+                    agents[current_agent_number].model.learning_rate = noise(best_agent.model.learning_rate, 0.0001)
+                print("Replaced model of agent "f"{current_agent_number} "f"with current "
+                      f"best model of agent "f"{best_agent_number}")
                 multiprocessing.Process(target=train, args=(cloudpickle.dumps(agents[current_agent_number]), queue,
                                                             reward_threshold)).start()
             else:
-                reward_threshold = agents[current_agent_number].latest_performance + 0.1
+                if agents[current_agent_number].latest_performance >= reward_threshold:
+                    reward_threshold = agents[current_agent_number].latest_performance + 0.1
                 # best_agent = copy.copy(agents[current_agent_number].model)
                 # best_agent_number = current_agent_number
                 process = multiprocessing.Process(target=train, args=(cloudpickle.dumps(agents[current_agent_number]),
                                                                       queue, reward_threshold)).start()
 
             best_agent_performance, best_agent_success_rate = evaluate_policy(
-                best_agent, env_temp, n_eval_episodes=50)
+                best_agent.model.policy, best_agent_env, n_eval_episodes=50)
             pbt_performance.append(best_agent_performance)
 
             current_timesteps = current_timesteps + agents[current_agent_number].recent_timesteps
@@ -161,11 +176,11 @@ if __name__ == '__main__':
 
         else:
             best_agent_performance, best_agent_success_rate = evaluate_policy(
-                best_agent, env_temp, n_eval_episodes=50)
+                best_agent.model.policy, best_agent_env, n_eval_episodes=50)
             print("Best agent number "f"{best_agent.number} "f", success rate "f"{best_agent_success_rate} "f" "
                   f"and performance "f"{best_agent_performance}")
 
-        if best_agent_success_rate == 1:
+        if best_agent_success_rate >= 1:
             flag_success += 1
             if flag_success == 5:  # track 5 successful evaluations in a row
                 end_of_training = True
