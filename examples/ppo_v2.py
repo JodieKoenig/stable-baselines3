@@ -3,12 +3,15 @@ import os
 import base64
 from pathlib import Path
 from IPython import display as ipythondisplay
+import torch.multiprocessing as mp
+import argparse
+import cloudpickle
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.evaluation_changes import evaluate_policy
 from stable_baselines3.common.vec_env import VecVideoRecorder, DummyVecEnv
-from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
+from stable_baselines3.common.callbacks_changes import EvalCallback, StopTrainingOnRewardThreshold
 
 # Functions
 
@@ -52,91 +55,108 @@ def record_video(env_id, model, video_length=500, prefix='', video_folder='/User
     eval_env_vid.close()
 
 
-# Fake display to allow rendering
-os.system("Xvfb :1 -screen 0 1024x768x24 &")
-os.environ['DISPLAY'] = ':1'
+if __name__ == '__main__':
+    # Fake display to allow rendering
+    os.system("Xvfb :1 -screen 0 1024x768x24 &")
+    os.environ['DISPLAY'] = ':1'
 
-# Training env
-env = make_vec_env("FetchReachDense-v1", n_envs=1)
-# Separate untrained evaluation env
-eval_env = make_vec_env("FetchReachDense-v1", n_envs=1)
+    # from https://subscription.packtpub.com/book/data/9781788834247/11/ch11lvl1sec45/a3c-data-parallelism
+    mp.set_start_method('spawn')
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("--cuda", default=False, action="store_true", help="Enable cuda")
+    # parser.add_argument("-n", "--name", required=True, help="Name of the run")
+    # args = parser.parse_args()
+    device = "cpu"
+    # writer = SummaryWriter(comment="-a3c-data_" + NAME + "_" + args.name)
 
-number_steps = 0
-accum_rewards = 0
-mean_ep_reward = 0
+    # Training env
+    env = make_vec_env("FetchReachDense-v1", n_envs=1)
+    net = PPO("MultiInputPolicy", env, verbose=1)
+    cloudpickle(env)
+    # net.share_memory()
+    # Separate untrained evaluation env
+    # eval_env = make_vec_env("FetchReachDense-v1", n_envs=1)
 
-# Define model
-model = PPO("MultiInputPolicy", env, verbose=1)
+    number_steps = 0
+    accum_rewards = 0
+    mean_ep_reward = 0
 
-# Evaluate untrained env
-mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
-print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
+    # Define model
+    # model = PPO("MultiInputPolicy", env, verbose=1)
 
-# video untrained model
-record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense_untrained')
+    # Evaluate untrained env
+    mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
+    print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
-# Stop training when the model reaches the reward threshold
-# callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=-1, verbose=1)
-# eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, verbose=1)
+    # video untrained model
+    record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense_untrained')
 
-# Almost infinite number of timesteps, but the training will stop
-# early as soon as the reward threshold is reached
+    # Stop training when the model reaches the reward threshold
+    # callback_on_best = StopTrainingOnRewardThreshold(reward_threshold=-1, verbose=1)
+    # eval_callback = EvalCallback(eval_env, callback_on_new_best=callback_on_best, verbose=1)
 
-# model.learn(int(1e10), callback=eval_callback)
+    # Almost infinite number of timesteps, but the training will stop
+    # early as soon as the reward threshold is reached
 
-# Train main env
-model.learn(total_timesteps=40000)
+    # model.learn(int(1e10), callback=eval_callback)
 
-# Evaluate the trained agent
-mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
-print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
+    # Train main env
+    model.learn(total_timesteps=40000)
 
-# video trained agent
-record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense')
+    # Evaluate the trained agent
+    mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=100)
+    print(f"mean_reward:{mean_reward:.2f} +/- {std_reward:.2f}")
 
-# show videos
-show_videos('/Users/jodiekoenig/Documents/SkripsieVideos', prefix='ppo-fetchreachdense')
-# obs = env.reset()
-# while True:
-#     action, _states = model.predict(obs)
-#     obs, rewards, dones, info = env.step(action)
-#     number_steps = number_steps + 1
-#     accum_rewards = accum_rewards + rewards
-#     mean_ep_reward = accum_rewards / number_steps
-#     print(number_steps)
-#     print(accum_rewards)
-#     print(mean_ep_reward)
-#     env.render()
 
-# example evaluate model
-# def evaluate(model, num_episodes=100, deterministic=True):
-#     """
-#     Evaluate a RL agent
-#     :param model: (BaseRLModel object) the RL Agent
-#     :param num_episodes: (int) number of episodes to evaluate it
-#     :return: (float) Mean reward for the last num_episodes
-#     """
-#     # This function will only work for a single Environment
-#     env = model.get_env()
-#     all_episode_rewards = []
-#     for i in range(num_episodes):
-#         timestep_rewards = []
-#         done = False
-#         obs = env.reset()
-#         while not done:
-#             # _states are only useful when using LSTM policies
-#             action, _states = model.predict(obs, deterministic=deterministic)
-#             # here, action, rewards and dones are arrays
-#             # because we are using vectorized env
-#             obs, reward, done, info = env.step(action)
-#             timestep_rewards.append(reward)
-#
-#         all_episode_rewards.append(sum(timestep_rewards))
-#
-#     mean_episode_reward = np.mean(all_episode_rewards)
-#     print("Mean reward:", mean_episode_reward, "Num episodes:", num_episodes)
-#
-#     return mean_episode_reward
+
+    new_model = PPO
+
+    # video trained agent
+    record_video('FetchReachDense-v1', model, video_length=500, prefix='ppo-fetchreachdense')
+
+    # show videos
+    show_videos('/Users/jodiekoenig/Documents/SkripsieVideos', prefix='ppo-fetchreachdense')
+    # obs = env.reset()
+    # while True:
+    #     action, _states = model.predict(obs)
+    #     obs, rewards, dones, info = env.step(action)
+    #     number_steps = number_steps + 1
+    #     accum_rewards = accum_rewards + rewards
+    #     mean_ep_reward = accum_rewards / number_steps
+    #     print(number_steps)
+    #     print(accum_rewards)
+    #     print(mean_ep_reward)
+    #     env.render()
+
+    # example evaluate model
+    # def evaluate(model, num_episodes=100, deterministic=True):
+    #     """
+    #     Evaluate a RL agent
+    #     :param model: (BaseRLModel object) the RL Agent
+    #     :param num_episodes: (int) number of episodes to evaluate it
+    #     :return: (float) Mean reward for the last num_episodes
+    #     """
+    #     # This function will only work for a single Environment
+    #     env = model.get_env()
+    #     all_episode_rewards = []
+    #     for i in range(num_episodes):
+    #         timestep_rewards = []
+    #         done = False
+    #         obs = env.reset()
+    #         while not done:
+    #             # _states are only useful when using LSTM policies
+    #             action, _states = model.predict(obs, deterministic=deterministic)
+    #             # here, action, rewards and dones are arrays
+    #             # because we are using vectorized env
+    #             obs, reward, done, info = env.step(action)
+    #             timestep_rewards.append(reward)
+    #
+    #         all_episode_rewards.append(sum(timestep_rewards))
+    #
+    #     mean_episode_reward = np.mean(all_episode_rewards)
+    #     print("Mean reward:", mean_episode_reward, "Num episodes:", num_episodes)
+    #
+    #     return mean_episode_reward
 
 
 

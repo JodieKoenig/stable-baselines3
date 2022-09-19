@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from stable_baselines3 import A2C, DDPG, DQN, PPO, SAC, TD3, HerReplayBuffer
-from stable_baselines3.common.callbacks import (
+from stable_baselines3.common.callbacks_changes import (
     CallbackList,
     CheckpointCallback,
     EvalCallback,

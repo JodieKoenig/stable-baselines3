@@ -1,13 +1,13 @@
 import os
 import warnings
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 
 import gym
 import numpy as np
 
 from stable_baselines3.common import base_class  # pytype: disable=pyi-error
-from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.evaluation_changes import evaluate_policy
 from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv, sync_envs_normalization
 
 
@@ -66,13 +66,13 @@ class BaseCallback(ABC):
         pass
 
     @abstractmethod
-    def _on_step(self) -> bool:
+    def _on_step(self) -> list:
         """
         :return: If the callback returns False, training is aborted early.
         """
-        return True
+        return self.performance_tracking
 
-    def on_step(self) -> bool:
+    def on_step(self) -> Tuple[bool, list]:
         """
         This method will be called by the model after each call to ``env.step()``.
 
@@ -306,6 +306,7 @@ class EvalCallback(EventCallback):
         render: bool = False,
         verbose: int = 1,
         warn: bool = True,
+        performance_tracking: float = []
     ):
         super().__init__(callback_after_eval, verbose=verbose)
 
@@ -321,6 +322,7 @@ class EvalCallback(EventCallback):
         self.deterministic = deterministic
         self.render = render
         self.warn = warn
+        self.performance_tracking = performance_tracking
 
         # Convert to VecEnv for consistency
         if not isinstance(eval_env, VecEnv):
@@ -370,9 +372,10 @@ class EvalCallback(EventCallback):
             if maybe_is_success is not None:
                 self._is_success_buffer.append(maybe_is_success)
 
-    def _on_step(self) -> bool:
+    def _on_step(self) -> Tuple[bool, list]:
 
         continue_training = True
+        self.performance_tracking = []
 
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
 
@@ -423,6 +426,7 @@ class EvalCallback(EventCallback):
             mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
             mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
             self.last_mean_reward = mean_reward
+            self.performance_tracking.append(mean_reward)
 
             if self.verbose > 0:
                 print(f"Eval num_timesteps={self.num_timesteps}, " f"episode_reward={mean_reward:.2f} +/- {std_reward:.2f}")
@@ -449,13 +453,13 @@ class EvalCallback(EventCallback):
                 self.best_mean_reward = mean_reward
                 # Trigger callback on new best model, if needed
                 if self.callback_on_new_best is not None:
-                    continue_training = self.callback_on_new_best.on_step()
+                    continue_training, self.performance_tracking = self.callback_on_new_best.on_step()
 
             # Trigger callback after every evaluation, if needed
             if self.callback is not None:
                 continue_training = continue_training and self._on_event()
 
-        return continue_training
+        return continue_training, self.performance_tracking
 
     def update_child_locals(self, locals_: Dict[str, Any]) -> None:
         """
@@ -482,8 +486,9 @@ class StopTrainingOnRewardThreshold(BaseCallback):
     def __init__(self, reward_threshold: float, verbose: int = 0):
         super().__init__(verbose=verbose)
         self.reward_threshold = reward_threshold
+        self.performance_tracking: float = []
 
-    def _on_step(self) -> bool:
+    def _on_step(self) -> Tuple[bool, list]:
         assert self.parent is not None, "``StopTrainingOnMinimumReward`` callback must be used " "with an ``EvalCallback``"
         # Convert np.bool_ to bool, otherwise callback() is False won't work
         continue_training = bool(self.parent.best_mean_reward < self.reward_threshold)
@@ -492,7 +497,8 @@ class StopTrainingOnRewardThreshold(BaseCallback):
                 f"Stopping training because the mean reward {self.parent.best_mean_reward:.2f} "
                 f" is above the threshold {self.reward_threshold}"
             )
-        return continue_training
+        self.performance_tracking.append(self.parent.best_mean_reward)
+        return continue_training, self.performance_tracking
 
 
 class EveryNTimesteps(EventCallback):

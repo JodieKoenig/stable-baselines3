@@ -10,7 +10,7 @@ import torch as th
 
 from stable_baselines3 import DDPG, DQN, SAC, TD3, HerReplayBuffer
 from stable_baselines3.common.envs import BitFlippingEnv
-from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.evaluation_changes import evaluate_policy
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3.common.vec_env import DummyVecEnv

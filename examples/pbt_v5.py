@@ -9,9 +9,9 @@ import random
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.evaluation_changes import evaluate_policy
 from stable_baselines3.common.vec_env import VecVideoRecorder, DummyVecEnv
-from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
+from stable_baselines3.common.callbacks_changes import EvalCallback, StopTrainingOnRewardThreshold
 
 
 #   REFERENCE!!
@@ -40,6 +40,7 @@ def record_video(env_id, model, video_length=500, prefix='',
 
 class Agents:
     def __init__(self):
+
         self.model = PPO(policy="MultiInputPolicy", env=env, verbose=1, n_steps=500)
         # put hyperparameters here instead?
         # learning rate, gamma, gae lambda?, clip range? ent coef?, vf coef?
@@ -121,6 +122,7 @@ while not end_of_training:
                 best_mean_session_performance = np.mean(current_performance)
 
             overall_timesteps += agents[num].total_agent_timesteps
+            print(overall_timesteps)
 
             # # EVAL METHOD 1: using the best mean from the callback every learn session
             # # this method does not seem to pick up best model at all times (overlaps missed)

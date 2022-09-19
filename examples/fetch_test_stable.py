@@ -1,7 +1,8 @@
 import gym
-import mujoco_py
+# import mujoco_py
 # Setting FetchPickAndPlace-v1 as the environment
 env = gym.make('FetchReach-v1')
+# env = gym.make('CartPole-v1')
 # Sets an initial state
 if env.reset() is not None:
     print('OKAY')

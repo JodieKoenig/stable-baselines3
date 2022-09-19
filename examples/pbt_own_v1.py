@@ -9,10 +9,12 @@ import random
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.evaluation import evaluate_policy
+from stable_baselines3.common.evaluation_changes import evaluate_policy
 from stable_baselines3.common.vec_env import VecVideoRecorder, DummyVecEnv
-from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
+from stable_baselines3.common.callbacks_changes import EvalCallback, StopTrainingOnRewardThreshold
 
+
+# Functions
 
 #   REFERENCE!!
 def record_video(env_id, model, video_length=500, prefix='',
@@ -40,6 +42,12 @@ def record_video(env_id, model, video_length=500, prefix='',
     eval_env_vid.close()
 
 
+# Fake display to allow rendering (REFERENCE!!)
+os.system("Xvfb :1 -screen 0 1024x768x24 &")
+os.environ['DISPLAY'] = ':1'
+
+
+# create class of agents
 class Agents:
     def __init__(self):
         self.model = PPO(policy="MultiInputPolicy", env=env, verbose=1, n_steps=500)
@@ -55,9 +63,7 @@ class Agents:
     #     print("Hello my name is " + self.name)
 
 
-# Fake display to allow rendering (REFERENCE!!)
-os.system("Xvfb :1 -screen 0 1024x768x24 &")
-os.environ['DISPLAY'] = ':1'
+# List constants here
 
 num_agents = int(input("The number of agents: "))
 agents = []

@@ -8,7 +8,7 @@ import torch as th
 
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.buffers import DictRolloutBuffer, RolloutBuffer
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks_changes import BaseCallback
 from stable_baselines3.common.policies import ActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import obs_as_tensor, safe_mean
@@ -130,7 +130,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         callback: BaseCallback,
         rollout_buffer: RolloutBuffer,
         n_rollout_steps: int,
-    ) -> bool:
+    ) -> Tuple[bool, list]:
         """
         Collect experiences using the current policy and fill a ``RolloutBuffer``.
         The term rollout here refers to the model-free notion and should not
@@ -147,6 +147,9 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         assert self._last_obs is not None, "No previous observation was provided"
         # Switch to eval mode (this affects batch norm / dropout)
         self.policy.set_training_mode(False)
+
+        performance_tracking = []
+        performances = []
 
         n_steps = 0
         rollout_buffer.reset()
@@ -174,14 +177,18 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 clipped_actions = np.clip(actions, self.action_space.low, self.action_space.high)
 
             new_obs, rewards, dones, infos = env.step(clipped_actions)
+            # performance_tracking.append(rewards)
 
             self.num_timesteps += env.num_envs
 
             # Give access to local variables
             callback.update_locals(locals())
-            if callback.on_step() is False:
-                return False
-
+            continue_training, performance_tracking = callback.on_step()
+            performances.append(performance_tracking)
+            # if infos[0].get('is_success') == 1:     # stop episode when successful
+            #     continue_training = False
+            if continue_training is False:
+                return False, performances
             self._update_info_buffer(infos)
             n_steps += 1
 
@@ -214,7 +221,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
         callback.on_rollout_end()
 
-        return True
+        return True, performances
 
     def train(self) -> None:
         """
@@ -234,8 +241,11 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         tb_log_name: str = "OnPolicyAlgorithm",
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
-    ) -> "OnPolicyAlgorithm":
+    ) -> Tuple['OnPolicyAlgorithm', List[list]]:
         iteration = 0
+        timestep_rewards = []
+        timestep_successes = []
+        performance_tracking = []
 
         total_timesteps, callback = self._setup_learn(
             total_timesteps, eval_env, callback, eval_freq, n_eval_episodes, eval_log_path, reset_num_timesteps, tb_log_name
@@ -245,7 +255,9 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
         while self.num_timesteps < total_timesteps:
 
-            continue_training = self.collect_rollouts(self.env, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
+            continue_training, current_performance_tracking = self.collect_rollouts(
+                self.env, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
+            performance_tracking.append(current_performance_tracking)
 
             if continue_training is False:
                 break
@@ -261,16 +273,20 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 if len(self.ep_info_buffer) > 0 and len(self.ep_info_buffer[0]) > 0:
                     self.logger.record("rollout/ep_rew_mean", safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]))
                     self.logger.record("rollout/ep_len_mean", safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]))
+                    timestep_rewards.append(safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]))
                 self.logger.record("time/fps", fps)
                 self.logger.record("time/time_elapsed", int(time_elapsed), exclude="tensorboard")
                 self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
+                if len(self.ep_success_buffer) > 0:
+                    self.logger.record("time/ep_success_rate", safe_mean(self.ep_success_buffer))
+                    timestep_successes.append(safe_mean(self.ep_success_buffer_buffer))
                 self.logger.dump(step=self.num_timesteps)
 
             self.train()
 
         callback.on_training_end()
 
-        return self
+        return self, current_performance_tracking
 
     def _get_torch_save_params(self) -> Tuple[List[str], List[str]]:
         state_dicts = ["policy", "policy.optimizer"]
